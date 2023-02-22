@@ -10,9 +10,10 @@ pipeline {
                 slackSend message: "Build Started - ${env.JOB_NAME} ${env.BUILD_NUMBER} (<${env.BUILD_URL}|Open>)"
             }
         }
-        stage("Get delivery branch") {
-            steps {
-                checkout scmGit(branches: [[name: "*/delivery"]], userRemoteConfigs: [[url: "https://github.com/DaamOps/"]])
+        stage('Maven Compile'){
+            steps{
+                checkout([$class: 'GitSCM', branches: [[name: '*/delivery']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/DaamOps/gestion-infractions.git']]])
+                sh 'mvn clean compile'
             }
         }
         stage("Build Front") {
