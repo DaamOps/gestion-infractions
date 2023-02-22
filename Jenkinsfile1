@@ -19,7 +19,7 @@ pipeline {
         stage("Build Back") {
             steps {
                 sh "docker build -t gestion-infractions-back:1.${env.BUILD_NUMBER} ./gestion-infractions-back"
-*            }
+            }
         }
         stage("Build database") {
             steps {
