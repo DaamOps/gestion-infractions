@@ -1,0 +1,88 @@
+pipeline {
+    agent any
+    stages {
+        stage ("Send Slack notification") {
+            steps {
+                slackSend message: "Build Started - ${env.JOB_NAME} ${env.BUILD_NUMBER} (<${env.BUILD_URL}|Open>)"
+            }
+        }
+        stage("Get delivery branch") {
+            steps {
+                checkout scmGit(branches: [[name: "*/delivery"]], userRemoteConfigs: [[url: "https://github.com/DaamOps/"]])
+            }
+        }
+        stage("Build Front") {
+            steps {
+                sh "docker build -t gestion-infractions-front:1.${env.BUILD_NUMBER} ./gestion-infractions-front"
+            }
+        }
+        stage("Build Back") {
+            steps {
+                sh "docker build -t gestion-infractions-back:1.${env.BUILD_NUMBER} ./gestion-infractions-back"
+*            }
+        }
+        stage("Build database") {
+            steps {
+                sh "docker pull mongo:4.4"
+                sh "docker tag mongo:4.4 db_mongo:1.${env.BUILD_NUMBER}"
+                sh "docker rmi mongo:4.4"
+            }
+        }
+        stage("Deploy services using Docker Compose") {
+            steps {
+                sh "echo API_PORT=${env.API_PORT} >> .env"
+                sh "echo MONGO_URI=${env.MONGO_URI} >> .env"
+                sh "echo PRIVATE_KEY=${env.PRIVATE_KEY} >> .env"
+                sh "docker compose up -d"
+            }
+        }
+        stage("Test application with cURL and web browser") {
+            steps {
+                sh "
+                    if [ $(curl -s -o /dev/null -w "%{response_code}" localhost:80) -eq 200 ]
+                    then
+                        echo \"App is working\"
+                    else
+                        exit 1
+                    fi
+                "
+            }
+        }
+        stage("Tag docker images") {
+            steps {
+                sh "docker tag gestion-infractions-back:1.${env.BUILD_NUMBER} DaamOps/gestion-infractions-back:1.${env.BUILD_NUMBER}"
+                sh "docker tag gestion-infractions-front:1.${env.BUILD_NUMBER} DaamOps/gestion-infractions-front:1.${env.BUILD_NUMBER}"
+                sh "docker tag db_mongo:1.${env.BUILD_NUMBER} DaamOps/db_mongo:1.${env.BUILD_NUMBER}"
+            }
+        }
+        stage("Push images to DockerHub") {
+            steps {
+                script {
+                    withCredentials([string(credentialsId: "docker_token", variable: "token")]) {
+                        sh "docker logout"
+                        sh "docker login -u DaamOps -p ${token}"
+
+                        sh "docker push DaamOps/gestion-infractions-back:1.${env.BUILD_NUMBER}"
+                        sh "docker push DaamOps/gestion-infractions-front:1.${env.BUILD_NUMBER}"
+                        sh "docker push DaamOps/db_mongo:1.${env.BUILD_NUMBER}"
+
+                        sh "docker logout"
+                    }
+                }
+            }
+        }
+        stage("Clean up") {
+            steps {
+                sh "docker system prune -af"
+            }
+        }
+    }
+    post {
+        success {
+            slackSend message: "Build success - ${env.JOB_NAME} ${env.BUILD_NUMBER} (<${env.BUILD_URL}|Open>)"
+        }
+        failure {
+            slackSend failOnError: true, message: "Build failed  - ${env.JOB_NAME} ${env.BUILD_NUMBER} (<${env.BUILD_URL}|Open>)"
+        }
+    }
+}
