@@ -1,0 +1,26 @@
+services:
+  frontend:
+    image: infraction-front
+    build:
+      context: ./gestion-infractions-front
+    ports:
+      - "80:80"
+  backend:
+    image: infraction-back
+    build:
+      context: ./gestion-infractions-back
+    ports: 
+      - "8090:8080"
+  db_mongo:
+    image: mongo:4.4
+    container_name: mongo_container
+    ports:
+      - "27018:27017"  
+    volumes:
+      - db-data:/db/data
+
+volumes:
+  db-data:
+    name: db-volumes
+
+
